@@ -53,6 +53,7 @@ func NewService(serviceConfig *ServiceConfig) (*Service, *errortools.Error) {
 
 	return &Service{
 		domain:       serviceConfig.Domain,
+		database:     serviceConfig.Database,
 		username:     serviceConfig.Username,
 		userId:       userId,
 		password:     serviceConfig.Password,
@@ -83,20 +84,10 @@ type Criterion struct {
 	Value    interface{}
 }
 
-func (service *Service) execute(method string, model string, criteria *[]Criterion, attributes []string, responseModel interface{}) *errortools.Error {
+func (service *Service) execute(method string, model string, args interface{}, options map[string]interface{}, responseModel interface{}) *errortools.Error {
 	service.apiCallCount++
 
-	var options = make(map[string]interface{})
-	options["attributes"] = attributes
-
-	var criteria_ = []interface{}{[]interface{}{}}
-	if criteria != nil {
-		for _, criterion := range *criteria {
-			criteria_ = append(criteria_, []interface{}{criterion.Field, criterion.Operator, criterion.Value})
-		}
-	}
-
-	err := service.clientObject.Call("execute_kw", []interface{}{service.database, service.userId, service.password, model, method, []interface{}{criteria_}, options}, responseModel)
+	err := service.clientObject.Call("execute_kw", []interface{}{service.database, service.userId, service.password, model, method, []interface{}{args}, options}, responseModel)
 	if err != nil {
 		return errortools.ErrorMessage(err)
 	}
@@ -105,9 +96,33 @@ func (service *Service) execute(method string, model string, criteria *[]Criteri
 }
 
 func (service *Service) getFields(model string, fields []string, responseModel interface{}) *errortools.Error {
-	return service.execute("fields_get", model, nil, fields, responseModel)
+	var options = make(map[string]interface{})
+	options["fields"] = fields
+
+	return service.execute("fields_get", model, nil, options, responseModel)
 }
 
 func (service *Service) searchRead(model string, criteria *[]Criterion, attributes []string, responseModel interface{}) *errortools.Error {
-	return service.execute("search_read", model, criteria, attributes, responseModel)
+	var criteria_ []interface{}
+	if criteria != nil {
+		for _, criterion := range *criteria {
+			criteria_ = append(criteria_, []interface{}{criterion.Field, criterion.Operator, criterion.Value})
+		}
+	}
+
+	var options = make(map[string]interface{})
+	options["fields"] = attributes
+
+	return service.execute("search_read", model, criteria_, options, responseModel)
+}
+
+func (service *Service) create(model string, data interface{}) (int64, *errortools.Error) {
+	var id int64
+
+	e := service.execute("create", model, data, nil, &id)
+	if e != nil {
+		return 0, e
+	}
+
+	return id, nil
 }
